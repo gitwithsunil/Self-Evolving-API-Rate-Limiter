@@ -106,6 +106,8 @@ venv\Scripts\activate        # Windows
 ```bash
 pip install -r requirements.txt
 ```
+NOTE: run each file in different Terminal 
+also RUN ngrok before starting the attck 
 
 ### 4. Start the rate limiter
 ```bash
