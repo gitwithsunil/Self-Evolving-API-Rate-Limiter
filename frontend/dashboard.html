@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SERL — Self-Evolving Rate Limiter</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:       #090b0f;
+    --surface:  #0f1318;
+    --border:   #1e2530;
+    --accent:   #00e5ff;
+    --green:    #00ff88;
+    --red:      #ff3d5a;
+    --amber:    #ffb800;
+    --purple:   #a855f7;
+    --text:     #e2e8f0;
+    --muted:    #4a5568;
+    --mono:     'Space Mono', monospace;
+    --sans:     'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,229,255,0.012) 2px,
+      rgba(0,229,255,0.012) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(15,19,24,0.95);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .logo span { color: var(--muted); }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .pulse {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .header-controls { display: flex; gap: 10px; }
+
+  .btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    padding: 7px 16px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.danger:hover { border-color: var(--red); color: var(--red); }
+  .btn.switch-btn:hover { border-color: var(--amber); color: var(--amber); }
+
+  /* ── MAIN GRID ── */
+  main { padding: 24px 32px; display: grid; gap: 20px; }
+
+  /* ── STAT CARDS ROW ── */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent-color, var(--accent));
+  }
+
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent-color, var(--text));
+    line-height: 1;
+  }
+
+  .stat-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* ── CHARTS ROW ── */
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px;
+  }
+
+  .chart-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .tag {
+    font-size: 10px;
+    padding: 3px 8px;
+    border: 1px solid;
+    letter-spacing: 0.1em;
+  }
+
+  .tag.normal { border-color: var(--green); color: var(--green); }
+  .tag.burst  { border-color: var(--amber); color: var(--amber); }
+  .tag.attack { border-color: var(--red);   color: var(--red); }
+  .tag.heavy  { border-color: var(--purple);color: var(--purple); }
+  .tag.quiet  { border-color: var(--muted); color: var(--muted); }
+
+  /* ── BOTTOM ROW ── */
+  .bottom-row {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 20px;
+  }
+
+  /* ── EVOLUTION LOG ── */
+  .evo-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px;
+  }
+
+  .evo-list {
+    height: 280px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .evo-entry {
+    border-left: 2px solid var(--border);
+    padding: 8px 12px;
+    font-size: 12px;
+    transition: border-color 0.3s;
+    animation: fadeIn 0.4s ease;
+  }
+
+  @keyframes fadeIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
+
+  .evo-entry.tighten { border-color: var(--red); }
+  .evo-entry.relax   { border-color: var(--green); }
+  .evo-entry.hold    { border-color: var(--muted); }
+
+  .evo-time {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+
+  .evo-limit {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+
+  .evo-reason {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* ── REQUEST LOG TABLE ── */
+  .log-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px;
+  }
+
+  .log-table-wrap {
+    height: 280px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  thead th {
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0 10px 10px;
+    text-align: left;
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(30,37,48,0.6);
+    transition: background 0.15s;
+  }
+  tbody tr:hover { background: rgba(255,255,255,0.025); }
+
+  td {
+    padding: 7px 10px;
+    color: var(--text);
+    opacity: 0.85;
+  }
+
+  .allow-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    background: rgba(0,255,136,0.12);
+    color: var(--green);
+    border: 1px solid rgba(0,255,136,0.3);
+    font-size: 10px;
+  }
+
+  .deny-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    background: rgba(255,61,90,0.12);
+    color: var(--red);
+    border: 1px solid rgba(255,61,90,0.3);
+    font-size: 10px;
+  }
+
+  /* ── ALGO INDICATOR ── */
+  .algo-display {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .algo-active {
+    color: var(--accent);
+    border-bottom: 1px solid var(--accent);
+    padding-bottom: 1px;
+    transition: color 0.3s;
+  }
+
+  /* ── ALGO SWITCH TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface);
+    border: 1px solid var(--amber);
+    color: var(--amber);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    padding: 10px 24px;
+    z-index: 9999;
+    transition: transform 0.35s ease;
+    pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ── EMPTY STATE ── */
+  .empty {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    padding: 40px 0;
+    text-align: center;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">SERL <span>//</span> Self-Evolving Rate Limiter</div>
+  <div class="status-pill">
+    <div class="pulse" id="conn-pulse"></div>
+    <span id="conn-status">CONNECTING</span>
+  </div>
+  <div class="header-controls">
+    <div class="algo-display">
+      <span>ALGO:</span>
+      <span id="algo-label" class="algo-active">—</span>
+    </div>
+    <button class="btn switch-btn" onclick="switchAlgo()">⇄ SWITCH ALGO</button>
+    <button class="btn" onclick="fetchAll()">↻ REFRESH</button>
+    <button class="btn danger" onclick="resetAll()">⚠ RESET</button>
+  </div>
+</header>
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<main>
+
+  <!-- STAT CARDS -->
+  <div class="stat-row">
+    <div class="stat-card" style="--accent-color: var(--accent)">
+      <div class="stat-label">Current Limit</div>
+      <div class="stat-value" id="stat-limit">—</div>
+      <div class="stat-sub">req / window</div>
+    </div>
+    <div class="stat-card" style="--accent-color: var(--green)">
+      <div class="stat-label">Total Requests</div>
+      <div class="stat-value" id="stat-total">—</div>
+      <div class="stat-sub">all time</div>
+    </div>
+    <div class="stat-card" style="--accent-color: var(--red)">
+      <div class="stat-label">Deny Ratio</div>
+      <div class="stat-value" id="stat-deny">—</div>
+      <div class="stat-sub">blocked / total</div>
+    </div>
+    <div class="stat-card" style="--accent-color: var(--amber)">
+      <div class="stat-label">Recent Rate</div>
+      <div class="stat-value" id="stat-rate">—</div>
+      <div class="stat-sub">req / sec (10s)</div>
+    </div>
+    <div class="stat-card" style="--accent-color: var(--purple)">
+      <div class="stat-label">RL Q-States</div>
+      <div class="stat-value" id="stat-qstates">—</div>
+      <div class="stat-sub">learned states</div>
+    </div>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">
+        <span>Request Rate vs Limit</span>
+        <span id="traffic-tag" class="tag normal">NORMAL</span>
+      </div>
+      <canvas id="rateChart" height="160"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">
+        <span>Allow / Deny Over Time</span>
+      </div>
+      <canvas id="allowDenyChart" height="160"></canvas>
+    </div>
+  </div>
+
+  <!-- BOTTOM ROW -->
+  <div class="bottom-row">
+
+    <!-- EVOLUTION LOG -->
+    <div class="evo-card">
+      <div class="chart-title">ML Evolution Log</div>
+      <div class="evo-list" id="evo-list">
+        <div class="empty">Waiting for ML engine decisions...</div>
+      </div>
+    </div>
+
+    <!-- REQUEST LOG -->
+    <div class="log-card">
+      <div class="chart-title">Live Request Log</div>
+      <div class="log-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Client</th>
+              <th>Status</th>
+              <th>Algo</th>
+              <th>Limit</th>
+              <th>Rate/s</th>
+            </tr>
+          </thead>
+          <tbody id="log-body">
+            <tr><td colspan="6" class="empty">No requests yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+const API = 'http://localhost:8000';
+const MAX_POINTS = 40;
+
+const rateData = { labels: [], rate: [], limit: [] };
+const adData   = { labels: [], allowed: [], denied: [] };
+
+// ── CHART SETUP ──────────────────────────────────────────────────────
+
+const chartDefaults = {
+  animation: { duration: 300 },
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { display: false },
+    y: {
+      grid: { color: 'rgba(30,37,48,0.8)', drawBorder: false },
+      ticks: { color: '#4a5568', font: { family: "'Space Mono'", size: 10 } },
+      border: { display: false },
+    }
+  },
+  elements: { point: { radius: 0 } },
+};
+
+const rateChart = new Chart(document.getElementById('rateChart'), {
+  type: 'line',
+  data: {
+    labels: rateData.labels,
+    datasets: [
+      {
+        label: 'Request rate',
+        data: rateData.rate,
+        borderColor: '#00e5ff',
+        borderWidth: 1.5,
+        fill: true,
+        backgroundColor: 'rgba(0,229,255,0.05)',
+        tension: 0.4,
+      },
+      {
+        label: 'Limit',
+        data: rateData.limit,
+        borderColor: '#ff3d5a',
+        borderWidth: 1,
+        borderDash: [4, 3],
+        fill: false,
+        tension: 0,
+      },
+    ]
+  },
+  options: { ...chartDefaults, scales: { ...chartDefaults.scales, y: { ...chartDefaults.scales.y, min: 0 } } },
+});
+
+const adChart = new Chart(document.getElementById('allowDenyChart'), {
+  type: 'bar',
+  data: {
+    labels: adData.labels,
+    datasets: [
+      {
+        label: 'Allowed',
+        data: adData.allowed,
+        backgroundColor: 'rgba(0,255,136,0.5)',
+        borderColor: 'rgba(0,255,136,0.8)',
+        borderWidth: 1,
+      },
+      {
+        label: 'Denied',
+        data: adData.denied,
+        backgroundColor: 'rgba(255,61,90,0.5)',
+        borderColor: 'rgba(255,61,90,0.8)',
+        borderWidth: 1,
+      },
+    ]
+  },
+  options: {
+    ...chartDefaults,
+    plugins: { legend: {
+      display: true,
+      labels: { color: '#4a5568', font: { family: "'Space Mono'", size: 10 }, boxWidth: 10, padding: 12 }
+    }},
+    scales: { ...chartDefaults.scales, x: { display: false }, y: { ...chartDefaults.scales.y, stacked: false } },
+  },
+});
+
+// ── HELPERS ──────────────────────────────────────────────────────────
+
+function push(arr, val) { arr.push(val); if (arr.length > MAX_POINTS) arr.shift(); }
+function fmt(ts) { return new Date(ts).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+
+let prevAllowed = 0, prevDenied = 0;
+
+// ── TOAST ────────────────────────────────────────────────────────────
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── FETCH STATUS ─────────────────────────────────────────────────────
+
+async function fetchStatus() {
+  try {
+    const r = await fetch(`${API}/api/status`);
+    if (!r.ok) throw new Error('bad response');
+    const d = await r.json();
+
+    setConnected(true);
+
+    const cfg   = d.limiter_config;
+    const stats = d.stats;
+    const ml    = d.ml_state;
+    const now   = fmt(new Date());
+
+    document.getElementById('stat-limit').textContent   = cfg.limit;
+    document.getElementById('stat-total').textContent   = stats.total_requests;
+    document.getElementById('stat-deny').textContent    = (stats.deny_ratio * 100).toFixed(1) + '%';
+    document.getElementById('stat-rate').textContent    = stats.recent_rate.toFixed(2);
+    document.getElementById('stat-qstates').textContent = ml.q_table_size;
+    document.getElementById('algo-label').textContent   = cfg.algorithm.replace('_', ' ').toUpperCase();
+
+    const tag = document.getElementById('traffic-tag');
+    const dr  = stats.deny_ratio;
+    const rr  = stats.recent_rate;
+    let label = 'NORMAL', cls = 'normal';
+    if (dr > 0.5 && rr > 2)    { label = 'ATTACK'; cls = 'attack'; }
+    else if (dr > 0.3)          { label = 'HEAVY';  cls = 'heavy'; }
+    else if (rr > 1.5)          { label = 'BURST';  cls = 'burst'; }
+    else if (rr < 0.05)         { label = 'QUIET';  cls = 'quiet'; }
+    tag.textContent = label;
+    tag.className = `tag ${cls}`;
+
+    push(rateData.labels, now);
+    push(rateData.rate, stats.recent_rate);
+    push(rateData.limit, cfg.limit / cfg.window);
+    rateChart.update('none');
+
+    const newAllowed = stats.allowed_requests - prevAllowed;
+    const newDenied  = stats.denied_requests  - prevDenied;
+    prevAllowed = stats.allowed_requests;
+    prevDenied  = stats.denied_requests;
+    push(adData.labels, now);
+    push(adData.allowed, Math.max(0, newAllowed));
+    push(adData.denied,  Math.max(0, newDenied));
+    adChart.update('none');
+
+  } catch (e) {
+    setConnected(false);
+  }
+}
+
+// ── FETCH LOGS ───────────────────────────────────────────────────────
+
+async function fetchLogs() {
+  try {
+    const r = await fetch(`${API}/api/logs?limit=40`);
+    const d = await r.json();
+    const tbody = document.getElementById('log-body');
+    if (!d.logs.length) return;
+
+    tbody.innerHTML = d.logs.map(l => `
+      <tr>
+        <td>${fmt(l.timestamp)}</td>
+        <td>${l.client_id}</td>
+        <td>${l.allowed
+          ? '<span class="allow-badge">ALLOW</span>'
+          : '<span class="deny-badge">DENY</span>'
+        }</td>
+        <td>${l.algorithm.replace('_', ' ')}</td>
+        <td>${l.limit}</td>
+        <td>${l.current_rate.toFixed(3)}</td>
+      </tr>
+    `).join('');
+  } catch (e) {}
+}
+
+// ── FETCH EVOLUTION ──────────────────────────────────────────────────
+
+let lastEvoCount = 0;
+
+async function fetchEvolution() {
+  try {
+    const r = await fetch(`${API}/api/evolution-history`);
+    const d = await r.json();
+    const history = d.history.slice().reverse();
+    if (history.length === lastEvoCount) return;
+    lastEvoCount = history.length;
+
+    const list = document.getElementById('evo-list');
+    if (!history.length) {
+      list.innerHTML = '<div class="empty">Waiting for ML engine decisions...</div>';
+      return;
+    }
+
+    list.innerHTML = history.map(e => {
+      const cls = e.new_limit < e.old_limit ? 'tighten'
+                : e.new_limit > e.old_limit ? 'relax' : 'hold';
+      const arrow = e.new_limit < e.old_limit ? '↓' : e.new_limit > e.old_limit ? '↑' : '→';
+      return `
+        <div class="evo-entry ${cls}">
+          <div class="evo-time">${fmt(e.timestamp)}</div>
+          <div class="evo-limit">${arrow} Limit: ${e.old_limit} → ${e.new_limit} &nbsp;|&nbsp; ${e.traffic_label?.toUpperCase() || ''}</div>
+          <div class="evo-reason">${e.reason || ''}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {}
+}
+
+// ── CONNECTED STATE ──────────────────────────────────────────────────
+
+function setConnected(ok) {
+  const pulse  = document.getElementById('conn-pulse');
+  const status = document.getElementById('conn-status');
+  pulse.style.background = ok ? 'var(--green)' : 'var(--red)';
+  pulse.style.boxShadow  = ok ? '0 0 8px var(--green)' : '0 0 8px var(--red)';
+  status.textContent     = ok ? 'LIVE' : 'DISCONNECTED';
+}
+
+// ── ALGO SWITCH ──────────────────────────────────────────────────────
+
+async function switchAlgo() {
+  const current = document.getElementById('algo-label').textContent.toLowerCase();
+  const next = current.includes('token') ? 'sliding_window' : 'token_bucket';
+  const label = next === 'sliding_window' ? 'SLIDING WINDOW' : 'TOKEN BUCKET';
+  try {
+    await fetch(`${API}/api/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: '__algo_switch__', algorithm: next })
+    });
+    document.getElementById('algo-label').textContent = label;
+    showToast('⇄ Switched to ' + label);
+    await fetchStatus();
+  } catch(e) {
+    showToast('✗ Could not reach rate limiter');
+  }
+}
+
+// ── RESET ────────────────────────────────────────────────────────────
+
+async function resetAll() {
+  if (!confirm('Reset all state? This clears telemetry and the ML model.')) return;
+  await fetch(`${API}/api/reset`, { method: 'POST' });
+  prevAllowed = 0; prevDenied = 0; lastEvoCount = 0;
+  rateData.labels.length = rateData.rate.length = rateData.limit.length = 0;
+  adData.labels.length = adData.allowed.length = adData.denied.length = 0;
+  rateChart.update();
+  adChart.update();
+  showToast('✓ All state reset');
+  fetchAll();
+}
+
+// ── POLL ─────────────────────────────────────────────────────────────
+
+function fetchAll() {
+  fetchStatus();
+  fetchLogs();
+  fetchEvolution();
+}
+
+fetchAll();
+setInterval(fetchStatus,    2000);
+setInterval(fetchLogs,      2500);
+setInterval(fetchEvolution, 3000);
+</script>
+</body>
+</html>
