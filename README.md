@@ -18,7 +18,7 @@ A normal rate limiter blocks users after a fixed number of requests — say 10 p
 > Think of it like a security guard who learns from experience. The more attacks he sees, the better he gets at stopping them.
 
 ---
-
+![Project Image](images/serl_realistic_explainer.png)
 ## Live Demo
 
 🌐 **Website:** https://gsunilkumarreddy23.pythonanywhere.com
