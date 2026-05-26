@@ -404,4 +404,4 @@ Visit the live site, log in with valid credentials. Show the protected dashboard
 
 ---
 
-*Built as a research lab project — NIST Institute of Science and Technology*
+*Built as a research purpose only*
