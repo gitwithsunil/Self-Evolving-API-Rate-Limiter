@@ -390,5 +390,6 @@ Visit the live site, log in with valid credentials. Show the protected dashboard
 ```
 
 ---
+WARNING:
+*Built as a research purpose only , Don not use without permission*
 
-*Built as a research purpose only*
