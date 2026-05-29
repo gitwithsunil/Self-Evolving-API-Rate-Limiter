@@ -372,19 +372,6 @@ Visit the live site, log in with valid credentials. Show the protected dashboard
 
 ---
 
-## Team
-
-| Roll Number | Institution |
-|---|---|
-| 202320117 | NIST Institute of Science and Technology |
-| 202320115 | NIST Institute of Science and Technology |
-| 202320147 | NIST Institute of Science and Technology |
-| 202320108 | NIST Institute of Science and Technology |
-
-**Guide:** Sir Bhabani Prasad Mishra
-
----
-
 ## References
 
 ```
