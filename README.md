@@ -225,7 +225,7 @@ The agent builds a Q-table over time. Each new traffic situation it encounters b
 ### 1. Clone the repo
 ```bash
 git clone https://github.com/gsunilkumarreddy23/SERL.git
-cd SERL
+cd Self-Evolving-API-Rate-Limiter
 ```
 
 ### 2. Create virtual environment
