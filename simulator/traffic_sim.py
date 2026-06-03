@@ -6,12 +6,14 @@ Run this in a separate terminal while the server is running.
 
 Usage:
     python simulator/traffic_sim.py [pattern]
+    will use only if you not testing on live sites.
 
 Patterns:
     normal  — steady 1 req/sec per client (default)
     burst   — sudden spike to 20 req/sec
     attack  — sustained flood from one IP
     mixed   — cycles through all patterns automatically
+    
 """
 
 import sys
